@@ -1,0 +1,8 @@
+NODE_ENV=development
+DB_HOST=127.0.0.1
+PORT=3000
+JWT_SECRET=<ein-langer-geheimer-schluessel>
+RPID=localhost
+ORIGIN=http://localhost:3000
+DB_PATH=./zso.db
+DB_PASS= 
