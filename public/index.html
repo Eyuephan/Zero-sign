@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zero Sign-On</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 640px; margin: 3rem auto; }
+    input, button, a { margin: .5rem 0; padding: .6rem .8rem; }
+    input { width: 100%; box-sizing: border-box; }
+    button { cursor: pointer; }
+    #status { margin-top: 1rem; font-weight: bold; }
+    pre { background: #f5f5f5; padding: 1rem; overflow: auto; min-height: 100px; }
+    .row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+    .muted { color: #666; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <h1>Zero Sign-On</h1>
+  <div id="actions"></div>
+  <div id="status" class="muted">Lade…</div>
+  <pre id="log"></pre>
+
+  <script type="module">
+    import { startRegistration, startAuthentication } from "https://cdn.skypack.dev/@simplewebauthn/browser";
+
+    const $ = (q) => document.querySelector(q);
+
+    function log(...args) {
+      console.log(...args);
+      const pre = $("#log");
+      if (!pre) return;
+      pre.textContent += args.map(x =>
+        typeof x === "object" ? JSON.stringify(x, null, 2) : String(x)
+      ).join(" ") + "\n";
+      pre.scrollTop = pre.scrollHeight;
+    }
+
+    async function logout() {
+      try {
+        log("[client] POST /logout …");
+        const r = await fetch("/logout", { method: "POST" });
+        log("[client] /logout status", r.status);
+      } catch (e) {
+        log("[client] POST /logout failed, fallback GET /logout", String(e));
+        window.location.href = "/logout";
+        return;
+      }
+      location.reload();
+    }
+
+    async function registerPasskey() {
+      try {
+        const email = $("#email").value.trim().toLowerCase();
+        if (!email) return alert("Bitte E-Mail eingeben");
+        log("[client] POST /register/start", { email });
+
+        const r1 = await fetch("/register/start", {
+          method: "POST",
+          headers: { "Content-Type":"application/json" },
+          body: JSON.stringify({ email }),
+        });
+        log("[client] /register/start status", r1.status);
+        const options = await r1.json();
+        log("→ reg options.challenge present:", !!options.challenge);
+
+        const att = await startRegistration(options);
+        log("→ attestation keys:", Object.keys(att));
+        att.email = email;                    // für /register/finish nötig
+
+        const r2 = await fetch("/register/finish", {
+          method: "POST",
+          headers: { "Content-Type":"application/json" },
+          body: JSON.stringify(att),
+        });
+        log("[client] /register/finish status", r2.status);
+        if (!r2.ok) {
+          const err = await r2.json().catch(()=>({}));
+          alert("Fehler bei Registrierung: " + JSON.stringify(err));
+          return;
+        }
+        log("✅ Registrierung abgeschlossen!");
+        location.reload();
+      } catch (e) {
+        log("[client] registerPasskey EXCEPTION", e);
+        alert("Fehler: " + e);
+      }
+    }
+
+    // Usernameless Login (ohne E-Mail)
+    async function loginPasskey() {
+      try {
+        log("[client] POST /login/start");
+        const r1 = await fetch("/login/start", { method: "POST" });
+        log("[client] /login/start status", r1.status);
+        const opts = await r1.json();
+        log("→ auth options.challenge present:", !!opts.challenge);
+
+        const assertion = await startAuthentication(opts);
+        log("→ assertion keys:", Object.keys(assertion));
+
+        // Challenge zurück an Server geben, damit pendingByChallenge gefunden wird
+        assertion.expectedChallenge = opts.challenge;
+
+        const r2 = await fetch("/login/finish", {
+          method: "POST",
+          headers: { "Content-Type":"application/json" },
+          body: JSON.stringify(assertion),
+        });
+        log("[client] /login/finish status", r2.status);
+        if (!r2.ok) {
+          const err = await r2.json().catch(()=>({}));
+          alert("Fehler bei Login: " + JSON.stringify(err));
+          return;
+        }
+        log("✅ Login erfolgreich!");
+        location.reload();
+      } catch (e) {
+        log("[client] loginPasskey EXCEPTION", e);
+        alert("Fehler: " + e);
+      }
+    }
+
+    async function checkLogin() {
+      const s = $("#status");
+      const a = $("#actions");
+      try {
+        const r = await fetch("/api/me", { cache: "no-store" });
+        log("[client] GET /api/me status", r.status);
+        if (!r.ok) throw 0;
+        const d = await r.json();
+        s.textContent = `✅ Eingeloggt als ${d.user.email}`;
+        a.innerHTML = `
+          <div class="row">
+            <button id="logout" type="button">Logout</button>
+            <a id="logout-link" href="/logout">Logout (Link)</a>
+          </div>
+        `;
+        $("#logout").onclick = logout;
+      } catch {
+        s.textContent = "❌ Nicht eingeloggt.";
+        a.innerHTML = `
+          <input id="email" placeholder="email@example.com" />
+          <div class="row">
+            <button id="reg">Passkey registrieren</button>
+            <button id="auth">Mit Passkey anmelden (ohne E-Mail)</button>
+          </div>
+        `;
+        $("#reg").onclick = registerPasskey; // Registrierung mit E-Mail
+        $("#auth").onclick = loginPasskey;   // Login ohne E-Mail
+      }
+    }
+
+    checkLogin();
+  </script>
+</body>
+</html>
