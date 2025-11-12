@@ -1,6 +1,6 @@
 // public/app.js
-import { startRegistration, startAuthentication } from "https://cdn.skypack.dev/@simplewebauthn/browser";
-
+import { startRegistration, startAuthentication } from
+  "https://cdn.jsdelivr.net/npm/@simplewebauthn/browser@11.0.0/+esm"; 
 const $ = (q) => document.querySelector(q);
 
 function log(...args) {
