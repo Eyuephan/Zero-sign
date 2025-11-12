@@ -1,3 +1,4 @@
+// public/app.js
 import { startRegistration, startAuthentication } from "https://cdn.skypack.dev/@simplewebauthn/browser";
 
 const $ = (q) => document.querySelector(q);
@@ -13,7 +14,6 @@ async function logout() {
     log("[client] POST /logout ...");
     const r = await fetch("/logout", { method: "POST" });
     log("[client] /logout status", r.status);
-    // Fallback falls POST blockiert ist
     if (!r.ok) {
       log("[client] POST /logout failed, fallback GET /logout");
       window.location.href = "/logout";
@@ -24,7 +24,6 @@ async function logout() {
     window.location.href = "/logout";
     return;
   }
-  // Nach Logout einmal prüfen, was der Server sieht
   try {
     const dbg = await fetch("/debug/cookies");
     log("[client] /debug/cookies after logout:", await dbg.json());
@@ -39,19 +38,22 @@ async function registerPasskey() {
     log("[client] POST /register/start", { email });
 
     const r1 = await fetch("/register/start", {
-      method: "POST", headers: { "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ email }),
     });
     log("[client] /register/start status", r1.status);
     const options = await r1.json();
     log("→ options:", options);
 
-    const att = await startRegistration(options);
+    // v11: options in { optionsJSON } übergeben
+    const att = await startRegistration({ optionsJSON: options });
     log("→ attestation keys:", Object.keys(att));
     att.email = email;
 
     const r2 = await fetch("/register/finish", {
-      method: "POST", headers: { "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify(att),
     });
     log("[client] /register/finish status", r2.status);
@@ -74,19 +76,25 @@ async function loginPasskey() {
     log("[client] POST /login/start", { email });
 
     const r1 = await fetch("/login/start", {
-      method: "POST", headers: { "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ email }),
     });
     log("[client] /login/start status", r1.status);
     const opts = await r1.json();
     log("→ auth options:", opts);
 
-    const ass = await startAuthentication(opts);
+    // v11: options in { optionsJSON } übergeben
+    const ass = await startAuthentication({ optionsJSON: opts });
     log("→ assertion keys:", Object.keys(ass));
+
+    // Challenge für den Server mitschicken (damit er pendingByChallenge findet)
+    ass.expectedChallenge = opts.challenge;
     ass.email = email;
 
     const r2 = await fetch("/login/finish", {
-      method: "POST", headers: { "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify(ass),
     });
     log("[client] /login/finish status", r2.status);
@@ -112,7 +120,7 @@ export async function checkLogin() {
     const d = await r.json();
     s.textContent = `✅ Eingeloggt als ${d.user.email}`;
     a.innerHTML = `<button id="logout" type="button">Logout</button>`;
-    $("#logout").onclick = logout; // bind an echte Logout-Funktion
+    $("#logout").onclick = logout;
   } catch {
     s.textContent = "❌ Nicht eingeloggt.";
     a.innerHTML = `

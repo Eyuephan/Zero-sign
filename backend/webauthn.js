@@ -1,4 +1,5 @@
 // backend/webauthn.js
+import "./polyfill-webcrypto.js"; // wichtig: vor @simplewebauthn/server laden
 import crypto from "node:crypto";
 import db from "./db.js";
 import { issueToken, setLoginCookie } from "./auth.js";
@@ -117,7 +118,6 @@ async function getUserByCredentialId(credIdBuf) {
 export default function webauthnRoutes(app) {
 
   /* ===== Registrierung (mit E-Mail) ===== */
-
   app.post("/register/start", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     console.log("[API] /register/start email:", email);
@@ -127,15 +127,26 @@ export default function webauthnRoutes(app) {
       const user = await upsertUser(email);
       const existing = await listCreds(user.id);
 
+      // v10+/v11-sichere Signatur: user:{ id, name, displayName }
+      const userIdBuf = Buffer.isBuffer(user.user_handle)
+        ? user.user_handle
+        : Buffer.from(user.user_handle);
+
       const options = await generateRegistrationOptions({
         rpName: "Zero Sign-On",
         rpID,
-        userID: user.user_handle,           // Buffer
-        userName: email,                    // Label im Browser
-        excludeCredentials: existing.map(c => ({ id: c.credential_id, type: "public-key" })),
+        user: {
+          id: userIdBuf,
+          name: email,
+          displayName: email,
+        },
+        excludeCredentials: (existing || []).map(c => ({
+          id: Buffer.from(c.credential_id),
+          type: "public-key",
+        })),
         authenticatorSelection: {
-          residentKey: "required",          // discoverable credential
-          userVerification: "required",     // biometrisch/PIN
+          residentKey: "required",
+          userVerification: "required",
         },
         attestationType: "none",
       });
