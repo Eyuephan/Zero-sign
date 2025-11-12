@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import harden from "./security.js";
 import { verifyToken, clearLoginCookie, COOKIE_NAME } from "./auth.js";
+import "./polyfill-webcrypto.js";
 import webauthnRoutes from "./webauthn.js";
 
 const app = express();
