@@ -1,0 +1,31 @@
+sudo tee /etc/apache2/sites-available/zso-ssl.conf >/dev/null <<'VHOST'
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+  ServerName example.com
+  # Zertifikate werden von Certbot eingesetzt (SSLCertificateFile/KeyFile)
+
+  # Weiterreichen an Node
+  ProxyPreserveHost On
+  ProxyPass        / http://127.0.0.1:3000/
+  ProxyPassReverse / http://127.0.0.1:3000/
+
+  # Sicherheitsheader (optional, falls nicht schon in eurer App gesetzt)
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "no-referrer"
+  Header always set X-XSS-Protection "1; mode=block"
+  Header always set Permissions-Policy "interest-cohort=()"
+
+  # WebSockets (falls später nötig)
+  RewriteEngine On
+  RewriteCond %{HTTP:Upgrade} =websocket [NC]
+  RewriteRule /(.*) ws://127.0.0.1:3000/$1 [P,L]
+
+  ErrorLog ${APACHE_LOG_DIR}/zso_error.log
+  CustomLog ${APACHE_LOG_DIR}/zso_access.log combined
+</VirtualHost>
+</IfModule>
+VHOST
+
+sudo a2ensite zso.conf zso-ssl.conf
+sudo systemctl reload apache2
